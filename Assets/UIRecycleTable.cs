@@ -11,7 +11,7 @@ public interface IRecycleTable
     Bounds bounds { set; get; }
 }
 
-public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
+public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 {
     public enum Direction
     {
@@ -29,7 +29,7 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
     /// UIRecycleTable唯一入口
     /// </summary>
     /// <param name="pScrollView"></param>
-    public UIRecycleTable(UIScrollView pScrollView, OnLoadItem pOnLoadItem, OnUpdateItem pOnUpdateItem, OnDeleteItem pOnDeleteItem)
+    public UIRecycleTable(UIScrollView pScrollView, OnLoadItem pOnLoadItem, OnUpdateItem pOnUpdateItem, OnDeleteItem pOnDeleteItem, bool pGeneralDragRegion)
     {
         if (pScrollView == null) return;
 
@@ -39,6 +39,7 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
         onLoadItem = pOnLoadItem;
         onUpdateItem = pOnUpdateItem;
         onDeleteItem = pOnDeleteItem;
+        generalDragRegion = pGeneralDragRegion;
 
         Init();
     }
@@ -66,7 +67,7 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
     #region 字段
     protected int mItemMaxCount;
     protected Bounds mItemsBounds;
-    protected bool mCalculatedBounds;
+    public bool mCalculatedBounds;
     #endregion
 
     #region 属性
@@ -90,6 +91,14 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
         protected set;
         get;
     }
+    /// <summary>
+    /// 是否生成DragRegion
+    /// </summary>
+    protected bool generalDragRegion
+    {
+        get;
+        set;
+    }
     public UIWidget dragRegion
     {
         protected set;
@@ -109,7 +118,7 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
     {
         get
         {
-            return itemControllerDic.Values.ToList();
+            return itemControllerDic.Values.ToList().FindAll(x => x.itemTransform.gameObject.activeInHierarchy);
         }
     }
     /// <summary>
@@ -120,20 +129,20 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
         get { return !scrollView; }
     }
     /// <summary>
-    /// 是否有BoxCollider
+    /// 是否有DragRegion
     /// </summary>
-    public bool isNoneBoxCollider
+    protected bool isNoneDragRegion
     {
         get { return !dragRegion; }
     }
     /// <summary>
     /// 是否有Item
     /// </summary>
-    public bool isNoneChild
+    protected bool isNoneChild
     {
         get { return !itemTrans || itemTrans.childCount == 0; }
     }
-    public int childCount
+    protected int childCount
     {
         get { return isNoneChild ? 0 : itemTrans.childCount; }
     }
@@ -159,19 +168,24 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
         set;
         get;
     }
-    protected Bounds itemsBounds
+    public Bounds itemsBounds
     {
         get
         {
             if (mCalculatedBounds)
             {
                 mCalculatedBounds = false;
-                mItemsBounds = NGUIMath.CalculateRelativeWidgetBounds(itemTrans, false);
+                mItemsBounds = NGUIMath.CalculateRelativeWidgetBounds(itemTrans);
             }
             return mItemsBounds;
         }
     }
     protected Bounds panelBounds
+    {
+        set;
+        get;
+    }
+    protected SpringPanel springPanel
     {
         set;
         get;
@@ -187,7 +201,7 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
         if (isNoneScrollView) return;
         NGUITools.DestroyChildren(scrollViewTrans);
 
-        scrollView.restrictWithinPanel = true;
+        scrollView.restrictWithinPanel = false;
         scrollView.disableDragIfFits = false;
 
         if (!itemTrans)
@@ -196,7 +210,7 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
             itemTrans.name = "Items";
         }
 
-        if (!dragRegion)
+        if (generalDragRegion && !dragRegion)
         {
             dragRegion = NGUITools.AddChild<UIWidget>(scrollView.gameObject);
             dragRegion.name = "DragRegion";
@@ -211,6 +225,12 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
             cacheTrans = NGUITools.AddChild(scrollViewTrans.parent.gameObject).transform;
             cacheTrans.name = "UIRecycleTableCache";
             cacheTrans.gameObject.SetActive(false);
+        }
+
+        if (!springPanel)
+        {
+            springPanel = scrollViewTrans.gameObject.AddMissingComponent<SpringPanel>();
+            springPanel.enabled = false;
         }
 
         var tClipRegion = panel.finalClipRegion;
@@ -254,9 +274,9 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
     /// <summary>
     /// 变更BoxCollider
     /// </summary>
-    void UpdateBoxColliderWidget(T pItemController = default(T), Direction pDirection = Direction.None)
+    void UpdateBoxColliderWidget(T pItemController = null, Direction pDirection = Direction.None)
     {
-        if (isNoneScrollView || isNoneBoxCollider) return;
+        if (isNoneScrollView || isNoneDragRegion) return;
 
         if (isNoneChild || (itemCount == 0))
         {
@@ -291,21 +311,23 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
     {
         if (isNoneScrollView || itemCount == 0) return;
 
-        mCalculatedBounds = true;
         var tPanelOffset = panel.CalculateConstrainOffset(itemsBounds.min, itemsBounds.max);
         if (tPanelOffset.y > 1)
         {
-            Debug.Log("下拉出框");
             AddItem(Direction.Top);
+            if (itemControllers.Exists(x => x.itemIndex == 0))
+            {
+                scrollView.RestrictWithinBounds(true);
+            }
         }
         else if (tPanelOffset.y < -1)
         {
-            Debug.Log("上拖出框");
             AddItem(Direction.Bottom);
-        }
-        else
-        {
-            Debug.Log("处于框中");
+
+            if (itemControllers.Exists(x => x.itemIndex == itemCount - 1))
+            {
+                scrollView.RestrictWithinBounds(true);
+            }
         }
     }
 
@@ -315,6 +337,7 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
     private void OnStoppedMoving()
     {
         if (isNoneScrollView) return;
+        OnSpringPanelFinished();
     }
 
     /// <summary>
@@ -332,18 +355,33 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
     {
         if (isNoneScrollView) return;
 
-        Debug.LogError(string.Format("panelBounds.center:{0}\nsize:{1}", panelBounds.center, panelBounds.size));
-        for (int i = 0; i < childCount; i++)
+        if (springPanel.enabled)
+        {
+            springPanel.onFinished = OnSpringPanelFinished;
+        }
+        else
+        {
+            OnSpringPanelFinished();
+        }
+    }
+
+    void OnSpringPanelFinished()
+    {
+        for (int i = 0; i < childCount;)
         {
             var tKey = itemTrans.GetChild(i);
             T tCtrl = default(T);
             if (!itemControllerDic.TryGetValue(tKey, out tCtrl)) continue;
             var tItemBounds = tCtrl.bounds;
             tItemBounds.center += tCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
-            if (panelBounds.Intersects(tItemBounds)) continue;
-            Debug.LogError(string.Format("tItemBounds.name:{2}\ncenter:{0}\nsize:{1}", tItemBounds.center, tItemBounds.size, tCtrl.itemIndex));
+            if (panelBounds.Intersects(tItemBounds))
+            {
+                ++i;
+                continue;
+            }
             MoveItemToCache(tCtrl);
         }
+        mCalculatedBounds = true;
     }
 
     /// <summary>
@@ -360,7 +398,7 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
         var tItemControllers = itemControllers;
         if (tItemControllers == null || tItemControllers.Count == 0) return;
         tItemControllers.Sort((x, y) => x.itemIndex.CompareTo(y.itemIndex));
-        T tTempItemCtrl = default(T);
+        T tTempItemCtrl = null;
         var tItemIndex = 0;
         switch (pDirection)
         {
@@ -379,10 +417,10 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
         var tItemCtrl = GetItemControllerByCache(tItemIndex);
         onUpdateItem(tItemCtrl, tItemIndex);
 
-        var tTempItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tTempItemCtrl.itemTransform, false);
+        var tTempItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tTempItemCtrl.itemTransform);
         tTempItemBounds.center += tTempItemCtrl.itemTransform.localPosition;
 
-        var tItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tItemCtrl.itemTransform, false);
+        var tItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tItemCtrl.itemTransform);
         tItemCtrl.bounds = tItemBounds;
 
         var tItemOffsetY = 0F;
@@ -395,11 +433,10 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
                 tItemOffsetY = tTempItemBounds.max.y - tItemBounds.min.y + itemIntervalPixel;
                 break;
         }
-        tItemCtrl.itemTransform.AddLocalPosY(tItemOffsetY);
+        tItemCtrl.itemTransform.SetLocalPosY(tItemOffsetY);
 
         UpdateBoxColliderWidget(tItemCtrl, pDirection);
         mCalculatedBounds = true;
-        Debug.LogError("add item index :" + tItemIndex);
     }
 
     #region 定位
@@ -414,9 +451,10 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
         var tPreviousMaxY = tPanelBounds.max.y;
         while (tPreviousMaxY > tPanelBounds.min.y)
         {
+            if (pIndex >= itemCount - 1) break;
             var tItemCtrl = GetItemControllerByCache(pIndex);
             if (onUpdateItem != null) onUpdateItem(tItemCtrl, pIndex++);
-            var tItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tItemCtrl.itemTransform, false);
+            var tItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tItemCtrl.itemTransform);
             tItemCtrl.bounds = tItemBounds;
 
             var tItemOffsetY = tPreviousMaxY - tItemBounds.max.y;
@@ -424,12 +462,15 @@ public class UIRecycleTable<T> : IDisposable where T : IRecycleTable
             tPreviousMaxY = tPreviousMaxY - tItemBounds.size.y - itemIntervalPixel;
         }
 
-        mCalculatedBounds = true;
-        var tItemsBounds = itemsBounds;
-        var tWidth = tItemsBounds.max.x - tItemsBounds.min.x;
-        var tHeight = tItemsBounds.max.y - tItemsBounds.min.y;
-        dragRegion.SetDimensions(Mathf.FloorToInt(tWidth), Mathf.FloorToInt(tHeight));
-        dragRegion.cachedTransform.SetLocalPos(tItemsBounds.center);
+        if (!isNoneDragRegion)
+        {
+            mCalculatedBounds = true;
+            var tItemsBounds = itemsBounds;
+            var tWidth = tItemsBounds.max.x - tItemsBounds.min.x;
+            var tHeight = tItemsBounds.max.y - tItemsBounds.min.y;
+            dragRegion.SetDimensions(Mathf.FloorToInt(tWidth), Mathf.FloorToInt(tHeight));
+            dragRegion.cachedTransform.SetLocalPos(tItemsBounds.center);
+        }
     }
     #endregion
 
