@@ -4,13 +4,6 @@ using UnityEngine;
 using System;
 using System.Linq;
 
-public interface IRecycleTable
-{
-    int itemIndex { set; get; }
-    Transform itemTransform { get; }
-    Bounds bounds { set; get; }
-}
-
 public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 {
     public enum Direction
@@ -29,7 +22,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// UIRecycleTable唯一入口
     /// </summary>
     /// <param name="pScrollView"></param>
-    public UIRecycleTable(UIScrollView pScrollView, OnLoadItem pOnLoadItem, OnUpdateItem pOnUpdateItem, OnDeleteItem pOnDeleteItem, bool pGeneralDragRegion)
+    public UIRecycleTable(UIScrollView pScrollView, OnLoadItem pOnLoadItem, OnUpdateItem pOnUpdateItem, OnDeleteItem pOnDeleteItem)
     {
         if (pScrollView == null) return;
 
@@ -39,7 +32,6 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         onLoadItem = pOnLoadItem;
         onUpdateItem = pOnUpdateItem;
         onDeleteItem = pOnDeleteItem;
-        generalDragRegion = pGeneralDragRegion;
 
         Init();
     }
@@ -67,7 +59,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     #region 字段
     protected int mItemMaxCount;
     protected Bounds mItemsBounds;
-    public bool mCalculatedBounds;
+    protected bool mCalculatedBounds;
     #endregion
 
     #region 属性
@@ -80,71 +72,6 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     {
         protected set;
         get;
-    }
-    public Transform scrollViewTrans
-    {
-        protected set;
-        get;
-    }
-    public Transform itemTrans
-    {
-        protected set;
-        get;
-    }
-    /// <summary>
-    /// 是否生成DragRegion
-    /// </summary>
-    protected bool generalDragRegion
-    {
-        get;
-        set;
-    }
-    public UIWidget dragRegion
-    {
-        protected set;
-        get;
-    }
-    protected Transform cacheTrans
-    {
-        set;
-        get;
-    }
-    protected Dictionary<Transform, T> itemControllerDic
-    {
-        set;
-        get;
-    }
-    protected List<T> itemControllers
-    {
-        get
-        {
-            return itemControllerDic.Values.ToList().FindAll(x => x.itemTransform.gameObject.activeInHierarchy);
-        }
-    }
-    /// <summary>
-    /// 是否有ScrollView
-    /// </summary>
-    public bool isNoneScrollView
-    {
-        get { return !scrollView; }
-    }
-    /// <summary>
-    /// 是否有DragRegion
-    /// </summary>
-    protected bool isNoneDragRegion
-    {
-        get { return !dragRegion; }
-    }
-    /// <summary>
-    /// 是否有Item
-    /// </summary>
-    protected bool isNoneChild
-    {
-        get { return !itemTrans || itemTrans.childCount == 0; }
-    }
-    protected int childCount
-    {
-        get { return isNoneChild ? 0 : itemTrans.childCount; }
     }
     /// <summary>
     /// Item数量
@@ -168,7 +95,52 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         set;
         get;
     }
-    public Bounds itemsBounds
+    protected Transform scrollViewTrans
+    {
+        set;
+        get;
+    }
+    protected Transform itemTrans
+    {
+        set;
+        get;
+    }
+    protected Transform cacheTrans
+    {
+        set;
+        get;
+    }
+    protected Dictionary<Transform, T> itemControllerDic
+    {
+        set;
+        get;
+    }
+    protected List<T> itemControllers
+    {
+        get
+        {
+            return itemControllerDic.Values.ToList().FindAll(x => x.itemTransform.gameObject.activeInHierarchy);
+        }
+    }
+    /// <summary>
+    /// 是否有ScrollView
+    /// </summary>
+    protected bool isNoneScrollView
+    {
+        get { return !scrollView; }
+    }
+    /// <summary>
+    /// 是否有Item
+    /// </summary>
+    protected bool isNoneChild
+    {
+        get { return !itemTrans || itemTrans.childCount == 0; }
+    }
+    protected int childCount
+    {
+        get { return isNoneChild ? 0 : itemTrans.childCount; }
+    }
+    protected Bounds itemsBounds
     {
         get
         {
@@ -186,6 +158,14 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         get;
     }
     protected SpringPanel springPanel
+    {
+        set;
+        get;
+    }
+    /// <summary>
+    /// 是否立即归位ScrollView
+    /// </summary>
+    protected bool immediateRestrictScrollView
     {
         set;
         get;
@@ -208,16 +188,6 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         {
             itemTrans = NGUITools.AddChild(scrollView.gameObject).transform;
             itemTrans.name = "Items";
-        }
-
-        if (generalDragRegion && !dragRegion)
-        {
-            dragRegion = NGUITools.AddChild<UIWidget>(scrollView.gameObject);
-            dragRegion.name = "DragRegion";
-            dragRegion.gameObject.AddMissingComponent<BoxCollider>();
-            dragRegion.autoResizeBoxCollider = true;
-            dragRegion.gameObject.AddComponent<UIDragScrollView>();
-            UpdateBoxColliderWidget();
         }
 
         if (!cacheTrans)
@@ -272,127 +242,9 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
     #region 主要逻辑
     /// <summary>
-    /// 变更BoxCollider
+    /// 添加Item
     /// </summary>
-    void UpdateBoxColliderWidget(T pItemController = null, Direction pDirection = Direction.None)
-    {
-        if (isNoneScrollView || isNoneDragRegion) return;
-
-        if (isNoneChild || (itemCount == 0))
-        {
-            //获取ScrollView的宽高设置BoxCollider
-            dragRegion.SetAnchor(scrollView.gameObject, 0, 0, 0, 0, 1, 0, 1, 0);
-            dragRegion.SetAnchor(null, 0, 0, 0, 0);
-        }
-        else if (pItemController != null)
-        {
-            //根据最后一个或者第一个item的位置，只修改BoxCollider的Bottom或Top
-
-            var tPos = dragRegion.cachedTransform.localPosition;
-            var tBounds = pItemController.bounds;
-            tBounds.center += pItemController.itemTransform.localPosition;
-            switch (pDirection)
-            {
-                case Direction.Bottom:
-                    dragRegion.cachedTransform.AddLocalPosY(-tBounds.size.y / 2);
-                    dragRegion.SetDimensions(Mathf.FloorToInt(dragRegion.localSize.x), Mathf.FloorToInt(dragRegion.localSize.y + tBounds.size.y + itemIntervalPixel));
-                    break;
-                case Direction.Top:
-                    break;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Panel裁剪时触发
-    /// </summary>
-    /// <param name="pPanel"></param>
-    private void OnClipMove(UIPanel pPanel)
-    {
-        if (isNoneScrollView || itemCount == 0) return;
-
-        var tPanelOffset = panel.CalculateConstrainOffset(itemsBounds.min, itemsBounds.max);
-        if (tPanelOffset.y > 1)
-        {
-            AddItem(Direction.Top);
-            if (itemControllers.Exists(x => x.itemIndex == 0))
-            {
-                scrollView.RestrictWithinBounds(true);
-            }
-        }
-        else if (tPanelOffset.y < -1)
-        {
-            AddItem(Direction.Bottom);
-
-            if (itemControllers.Exists(x => x.itemIndex == itemCount - 1))
-            {
-                scrollView.RestrictWithinBounds(true);
-            }
-        }
-    }
-
-    /// <summary>
-    /// ScrollView停止移动时触发
-    /// </summary>
-    private void OnStoppedMoving()
-    {
-        if (isNoneScrollView) return;
-        OnSpringPanelFinished();
-    }
-
-    /// <summary>
-    /// ScrollView移动时触发（每帧都会触发）
-    /// </summary>
-    private void OnMomentumMove()
-    {
-        if (isNoneScrollView) return;
-    }
-
-    /// <summary>
-    /// 手指松开时触发
-    /// </summary>
-    private void OnDragFinished()
-    {
-        if (isNoneScrollView) return;
-
-        if (springPanel.enabled)
-        {
-            springPanel.onFinished = OnSpringPanelFinished;
-        }
-        else
-        {
-            OnSpringPanelFinished();
-        }
-    }
-
-    void OnSpringPanelFinished()
-    {
-        for (int i = 0; i < childCount;)
-        {
-            var tKey = itemTrans.GetChild(i);
-            T tCtrl = default(T);
-            if (!itemControllerDic.TryGetValue(tKey, out tCtrl)) continue;
-            var tItemBounds = tCtrl.bounds;
-            tItemBounds.center += tCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
-            if (panelBounds.Intersects(tItemBounds))
-            {
-                ++i;
-                continue;
-            }
-            MoveItemToCache(tCtrl);
-        }
-        mCalculatedBounds = true;
-    }
-
-    /// <summary>
-    /// 手指按下时触发
-    /// </summary>
-    private void OnDragStarted()
-    {
-        if (isNoneScrollView) return;
-    }
-    #endregion
-
+    /// <param name="pDirection"></param>
     void AddItem(Direction pDirection)
     {
         var tItemControllers = itemControllers;
@@ -435,11 +287,127 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         }
         tItemCtrl.itemTransform.SetLocalPosY(tItemOffsetY);
 
-        UpdateBoxColliderWidget(tItemCtrl, pDirection);
         mCalculatedBounds = true;
     }
 
+    /// <summary>
+    /// Panel裁剪时触发
+    /// </summary>
+    /// <param name="pPanel"></param>
+    private void OnClipMove(UIPanel pPanel)
+    {
+        if (isNoneScrollView || itemCount == 0) return;
+
+        var tPanelOffset = panel.CalculateConstrainOffset(itemsBounds.min, itemsBounds.max);
+        if (tPanelOffset.y > 1)
+        {
+            AddItem(Direction.Top);
+            var tIsTop = itemControllers.Exists(x => x.itemIndex == 0);
+            if (scrollView.isDragging)
+            {
+                immediateRestrictScrollView = tIsTop;
+                if (!tIsTop)
+                {
+                    MoveOverBoundsItemTOCache();
+                }
+            }
+            else if (tIsTop)
+            {
+                RestrictWithinBounds(false);
+            }
+        }
+        else if (tPanelOffset.y < -1)
+        {
+            AddItem(Direction.Bottom);
+
+            var tIsBottom = itemControllers.Exists(x => x.itemIndex == itemCount - 1);
+            if (scrollView.isDragging)
+            {
+                immediateRestrictScrollView = tIsBottom;
+                if (!tIsBottom)
+                {
+                    MoveOverBoundsItemTOCache();
+                }
+            }
+            else if (tIsBottom)
+            {
+                RestrictWithinBounds(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// ScrollView停止移动时触发
+    /// </summary>
+    private void OnStoppedMoving()
+    {
+        if (isNoneScrollView) return;
+        MoveOverBoundsItemTOCache();
+    }
+
+    /// <summary>
+    /// ScrollView移动时触发（每帧都会触发）
+    /// </summary>
+    private void OnMomentumMove()
+    {
+        if (isNoneScrollView) return;
+    }
+
+    /// <summary>
+    /// 手指松开时触发
+    /// </summary>
+    private void OnDragFinished()
+    {
+        if (isNoneScrollView) return;
+
+        if (immediateRestrictScrollView)
+        {
+            RestrictWithinBounds(false);
+        }
+
+        if (springPanel.enabled)
+        {
+            springPanel.onFinished = MoveOverBoundsItemTOCache;
+        }
+        else
+        {
+            MoveOverBoundsItemTOCache();
+        }
+    }
+
+    /// <summary>
+    /// 手指按下时触发
+    /// </summary>
+    private void OnDragStarted()
+    {
+        if (isNoneScrollView) return;
+    }
+    #endregion
+
+    #region 其他逻辑
+    /// <summary>
+    /// ScrollView归位
+    /// </summary>
+    /// <param name="pInstant"></param>
+    void RestrictWithinBounds(bool pInstant)
+    {
+        scrollView.RestrictWithinBounds(pInstant);
+    }
+
+    /// <summary>
+    /// 禁掉SpringPanel的滑动
+    /// </summary>
+    void DisableSpringPanel()
+    {
+        springPanel.enabled = false;
+    }
+    #endregion
+
     #region 定位
+    /// <summary>
+    /// 定位到指定Index下
+    /// </summary>
+    /// <param name="pIndex"></param>
     public void MoveToItemByIndex(int pIndex)
     {
         if (isNoneScrollView) return;
@@ -458,22 +426,40 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             tItemCtrl.bounds = tItemBounds;
 
             var tItemOffsetY = tPreviousMaxY - tItemBounds.max.y;
-            tItemCtrl.itemTransform.AddLocalPosY(tItemOffsetY);
+            tItemCtrl.itemTransform.SetLocalPosY(tItemOffsetY);
             tPreviousMaxY = tPreviousMaxY - tItemBounds.size.y - itemIntervalPixel;
-        }
-
-        if (!isNoneDragRegion)
-        {
-            mCalculatedBounds = true;
-            var tItemsBounds = itemsBounds;
-            var tWidth = tItemsBounds.max.x - tItemsBounds.min.x;
-            var tHeight = tItemsBounds.max.y - tItemsBounds.min.y;
-            dragRegion.SetDimensions(Mathf.FloorToInt(tWidth), Mathf.FloorToInt(tHeight));
-            dragRegion.cachedTransform.SetLocalPos(tItemsBounds.center);
         }
     }
     #endregion
 
+    #region 缓存池
+    /// <summary>
+    /// 移除超出区域的Item到缓存池
+    /// </summary>
+    void MoveOverBoundsItemTOCache()
+    {
+        for (int i = 0; i < childCount;)
+        {
+            var tKey = itemTrans.GetChild(i);
+            T tCtrl = default(T);
+            if (!itemControllerDic.TryGetValue(tKey, out tCtrl)) continue;
+            var tItemBounds = tCtrl.bounds;
+            tItemBounds.center += tCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
+            if (panelBounds.Intersects(tItemBounds))
+            {
+                ++i;
+                continue;
+            }
+            MoveItemToCache(tCtrl);
+        }
+        mCalculatedBounds = true;
+    }
+
+    /// <summary>
+    /// 从缓存池获取Item
+    /// </summary>
+    /// <param name="pIndex"></param>
+    /// <returns></returns>
     T GetItemControllerByCache(int pIndex)
     {
         if (itemControllerDic == null)
@@ -501,6 +487,10 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         return tItem;
     }
 
+    /// <summary>
+    /// 移动指定Item到缓存池
+    /// </summary>
+    /// <param name="pCtrl"></param>
     void MoveItemToCache(T pCtrl)
     {
         if (pCtrl == null) return;
@@ -516,9 +506,11 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         {
             itemTrans.GetChild(0).SetParent(cacheTrans);
         }
-        scrollView.ResetPosition();
+        panel.baseClipRegion = new Vector4(panelBounds.center.x, panelBounds.center.y, panelBounds.size.x, panelBounds.size.y);
     }
+    #endregion
 
+    #region 释放资源
     /// <summary>
     /// 清空所有Item
     /// </summary>
@@ -544,8 +536,22 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         onUpdateItem = null;
         onDeleteItem = null;
     }
+    #endregion
 }
 
+/// <summary>
+/// Item 必须继承自该接口
+/// </summary>
+public interface IRecycleTable
+{
+    int itemIndex { set; get; }
+    Transform itemTransform { get; }
+    Bounds bounds { set; get; }
+}
+
+/// <summary>
+/// 扩展
+/// </summary>
 static class UIRecycleTableExtension
 {
     static public void AddLocalPos(this Transform pTr, Vector2 pPos)
