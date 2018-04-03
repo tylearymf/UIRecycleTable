@@ -18,7 +18,7 @@ public class TestVieController : MonoBehaviour
         mRecycleTable = new UIRecycleTable<ItemController>(mScrollView, OnLoadItem, OnUpdateItem, OnDeleteItem);
         mRecycleTable.itemCount = mDatas.Count;
         mRecycleTable.itemIntervalPixel = 20;
-        mRecycleTable.MoveToItemByIndex(0);
+        mRecycleTable.MoveToItemByIndex(10);
     }
 
     private void OnDeleteItem(ItemController pItem)

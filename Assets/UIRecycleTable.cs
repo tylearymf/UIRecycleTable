@@ -6,6 +6,7 @@ using System.Linq;
 
 public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 {
+
     public enum Direction
     {
         None,
@@ -170,6 +171,17 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         set;
         get;
     }
+    /// <summary>
+    /// ScrollView方向
+    /// </summary>
+    protected UIScrollView.Movement movement
+    {
+        get
+        {
+            if (isNoneScrollView) return UIScrollView.Movement.Custom;
+            return scrollView.movement;
+        }
+    }
     #endregion
 
     #region 初始化
@@ -188,6 +200,16 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         {
             itemTrans = NGUITools.AddChild(scrollView.gameObject).transform;
             itemTrans.name = "Items";
+
+            switch (movement)
+            {
+                case UIScrollView.Movement.Horizontal:
+                    itemTrans.SetLocalPosY(panel.finalClipRegion.y);
+                    break;
+                case UIScrollView.Movement.Vertical:
+                    itemTrans.SetLocalPosX(panel.finalClipRegion.x);
+                    break;
+            }
         }
 
         if (!cacheTrans)
@@ -247,6 +269,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <param name="pDirection"></param>
     void AddItem(Direction pDirection)
     {
+        if (pDirection == Direction.None) return;
         var tItemControllers = itemControllers;
         if (tItemControllers == null || tItemControllers.Count == 0) return;
         tItemControllers.Sort((x, y) => x.itemIndex.CompareTo(y.itemIndex));
@@ -254,11 +277,13 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         var tItemIndex = 0;
         switch (pDirection)
         {
+            case Direction.Right:
             case Direction.Bottom:
                 tTempItemCtrl = tItemControllers[tItemControllers.Count - 1];
                 tItemIndex = tTempItemCtrl.itemIndex + 1;
                 if (tItemIndex >= itemCount) return;
                 break;
+            case Direction.Left:
             case Direction.Top:
                 tTempItemCtrl = tItemControllers[0];
                 tItemIndex = tTempItemCtrl.itemIndex - 1;
@@ -275,17 +300,43 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         var tItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tItemCtrl.itemTransform);
         tItemCtrl.bounds = tItemBounds;
 
-        var tItemOffsetY = 0F;
+        var tItemOffset = 0F;
         switch (pDirection)
         {
+            case Direction.Left:
             case Direction.Bottom:
-                tItemOffsetY = tTempItemBounds.min.y - tItemBounds.max.y - itemIntervalPixel;
+                switch (movement)
+                {
+                    case UIScrollView.Movement.Horizontal:
+                        tItemOffset = tTempItemBounds.min.x - tItemBounds.max.x - itemIntervalPixel;
+                        break;
+                    case UIScrollView.Movement.Vertical:
+                        tItemOffset = tTempItemBounds.min.y - tItemBounds.max.y - itemIntervalPixel;
+                        break;
+                }
                 break;
+            case Direction.Right:
             case Direction.Top:
-                tItemOffsetY = tTempItemBounds.max.y - tItemBounds.min.y + itemIntervalPixel;
+                switch (movement)
+                {
+                    case UIScrollView.Movement.Horizontal:
+                        tItemOffset = tTempItemBounds.max.x - tItemBounds.min.x + itemIntervalPixel;
+                        break;
+                    case UIScrollView.Movement.Vertical:
+                        tItemOffset = tTempItemBounds.max.y - tItemBounds.min.y + itemIntervalPixel;
+                        break;
+                }
                 break;
         }
-        tItemCtrl.itemTransform.SetLocalPosY(tItemOffsetY);
+        switch (movement)
+        {
+            case UIScrollView.Movement.Horizontal:
+                tItemCtrl.itemTransform.SetLocalPosX(tItemOffset);
+                break;
+            case UIScrollView.Movement.Vertical:
+                tItemCtrl.itemTransform.SetLocalPosY(tItemOffset);
+                break;
+        }
 
         mCalculatedBounds = true;
     }
@@ -297,39 +348,46 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     private void OnClipMove(UIPanel pPanel)
     {
         if (isNoneScrollView || itemCount == 0) return;
-
         var tPanelOffset = panel.CalculateConstrainOffset(itemsBounds.min, itemsBounds.max);
-        if (tPanelOffset.y > 1)
+
+        var tIsLeft = tPanelOffset.x < -1 && movement == UIScrollView.Movement.Horizontal;
+        var tIsBottom = tPanelOffset.y < -1 && movement == UIScrollView.Movement.Vertical;
+        var tIsRight = tPanelOffset.x > 1 && movement == UIScrollView.Movement.Horizontal;
+        var tIsTop = tPanelOffset.y > 1 && movement == UIScrollView.Movement.Vertical;
+
+        if (tIsLeft || tIsTop)
         {
-            AddItem(Direction.Top);
-            var tIsTop = itemControllers.Exists(x => x.itemIndex == 0);
+            AddItem(tIsLeft ? Direction.Left : tIsTop ? Direction.Top : Direction.None);
+            var tIsTopOrLeft = itemControllers.Exists(x => x.itemIndex == 0);
             if (scrollView.isDragging)
             {
-                immediateRestrictScrollView = tIsTop;
-                if (!tIsTop)
+                immediateRestrictScrollView = tIsTopOrLeft;
+                if (!tIsTopOrLeft)
                 {
-                    MoveOverBoundsItemTOCache();
+                    //开启这个后，如果使劲上下拖拽，会出现Item全部消失的bug
+                    //MoveOverBoundsItemTOCache();
                 }
             }
-            else if (tIsTop)
+            else if (tIsTopOrLeft)
             {
                 RestrictWithinBounds(false);
             }
         }
-        else if (tPanelOffset.y < -1)
+        else if (tIsRight || tIsBottom)
         {
-            AddItem(Direction.Bottom);
+            AddItem(tIsRight ? Direction.Right : tIsBottom ? Direction.Bottom : Direction.None);
 
-            var tIsBottom = itemControllers.Exists(x => x.itemIndex == itemCount - 1);
+            var tIsBottomOrRight = itemControllers.Exists(x => x.itemIndex == itemCount - 1);
             if (scrollView.isDragging)
             {
-                immediateRestrictScrollView = tIsBottom;
-                if (!tIsBottom)
+                immediateRestrictScrollView = tIsBottomOrRight;
+                if (!tIsBottomOrRight)
                 {
-                    MoveOverBoundsItemTOCache();
+                    //开启这个后，如果使劲上下拖拽，会出现Item全部消失的bug
+                    //MoveOverBoundsItemTOCache();
                 }
             }
-            else if (tIsBottom)
+            else if (tIsBottomOrRight)
             {
                 RestrictWithinBounds(false);
             }
@@ -381,6 +439,8 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     private void OnDragStarted()
     {
         if (isNoneScrollView) return;
+        DisableSpringPanel();
+        mCalculatedBounds = true;
     }
     #endregion
 
@@ -416,18 +476,37 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
         if (itemCount == 0) return;
         var tPanelBounds = panelBounds;
-        var tPreviousMaxY = tPanelBounds.max.y;
-        while (tPreviousMaxY > tPanelBounds.min.y)
+        if (movement == UIScrollView.Movement.Vertical)
         {
-            if (pIndex >= itemCount - 1) break;
-            var tItemCtrl = GetItemControllerByCache(pIndex);
-            if (onUpdateItem != null) onUpdateItem(tItemCtrl, pIndex++);
-            var tItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tItemCtrl.itemTransform);
-            tItemCtrl.bounds = tItemBounds;
+            var tPreviousMaxY = tPanelBounds.max.y;
+            while (tPreviousMaxY > tPanelBounds.min.y)
+            {
+                if (pIndex >= itemCount - 1) break;
+                var tItemCtrl = GetItemControllerByCache(pIndex);
+                if (onUpdateItem != null) onUpdateItem(tItemCtrl, pIndex++);
+                var tItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tItemCtrl.itemTransform);
+                tItemCtrl.bounds = tItemBounds;
 
-            var tItemOffsetY = tPreviousMaxY - tItemBounds.max.y;
-            tItemCtrl.itemTransform.SetLocalPosY(tItemOffsetY);
-            tPreviousMaxY = tPreviousMaxY - tItemBounds.size.y - itemIntervalPixel;
+                var tItemOffsetY = tPreviousMaxY - tItemBounds.max.y;
+                tItemCtrl.itemTransform.SetLocalPosY(tItemOffsetY);
+                tPreviousMaxY = tPreviousMaxY - tItemBounds.size.y - itemIntervalPixel;
+            }
+        }
+        else if (movement == UIScrollView.Movement.Horizontal)
+        {
+            var tPreviousMinX = tPanelBounds.min.x;
+            while (tPreviousMinX < tPanelBounds.max.x)
+            {
+                if (pIndex >= itemCount - 1) break;
+                var tItemCtrl = GetItemControllerByCache(pIndex);
+                if (onUpdateItem != null) onUpdateItem(tItemCtrl, pIndex++);
+                var tItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tItemCtrl.itemTransform);
+                tItemCtrl.bounds = tItemBounds;
+
+                var tItemOffsetX = tPreviousMinX - tItemBounds.min.x;
+                tItemCtrl.itemTransform.SetLocalPosX(tItemOffsetX);
+                tPreviousMinX = tPreviousMinX + tItemBounds.size.x + itemIntervalPixel;
+            }
         }
     }
     #endregion

@@ -30,6 +30,7 @@ public class ItemController : IRecycleTable
     public void SetData(string pName)
     {
         mSprite.height = Random.Range(50, 150);
+        mSprite.width = Random.Range(50, 150);
         mLabel.text = pName;
     }
 }
