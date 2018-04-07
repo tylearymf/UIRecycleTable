@@ -31,7 +31,7 @@ public class TestVieController : MonoBehaviour
         pItem.SetData(mDatas[pIndex]);
     }
 
-    private ItemController OnLoadItem()
+    private ItemController OnLoadItem(int pIndex)
     {
         var tPrefab = Instantiate(mPrefab);
         var tItemCtroller = new ItemController(tPrefab);

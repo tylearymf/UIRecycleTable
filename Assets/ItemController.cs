@@ -24,7 +24,7 @@ public class ItemController : IRecycleTable
         }
     }
 
-    public int itemIndex { set; get; }
+    public int dataIndex { set; get; }
     public Bounds bounds { set; get; }
 
     public void SetData(string pName)

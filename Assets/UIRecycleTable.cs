@@ -1,12 +1,21 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using System;
 using System.Linq;
 
+/// <summary>
+/// 无限滚动Table
+/// --使用说明
+///     ---mRecycleTable = new UIRecycleTable<ItemController>(mScrollView, OnLoadItem, OnUpdateItem, OnDeleteItem);
+///        mRecycleTable.itemCount = mDatas.Count;
+///        mRecycleTable.itemIntervalPixel = 20;
+///        mRecycleTable.MoveToItemByIndex(10);
+/// --注意
+///     --当Item的边界盒有变化时，必须调用（UpdateItemBounds）更新下
+/// </summary>
+/// <typeparam name="T"></typeparam>
 public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 {
-
     public enum Direction
     {
         None,
@@ -39,9 +48,9 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     #endregion
 
     #region 事件
-    public delegate T OnLoadItem();
-    public delegate void OnUpdateItem(T pItem, int pIndex);
-    public delegate void OnDeleteItem(T pItem);
+    public delegate T OnLoadItem(int pDataIndex);
+    public delegate void OnUpdateItem(T pItemCtrl, int pDataIndex);
+    public delegate void OnDeleteItem(T pItemCtrl);
 
     /// <summary>
     /// 加载Item
@@ -96,14 +105,14 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         set;
         get;
     }
-    protected Transform scrollViewTrans
+    public Transform scrollViewTrans
     {
-        set;
+        protected set;
         get;
     }
-    protected Transform itemTrans
+    public Transform itemTrans
     {
-        set;
+        protected set;
         get;
     }
     protected Transform cacheTrans
@@ -111,17 +120,21 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         set;
         get;
     }
+    /// <summary>
+    /// 存储所有item（包含ui下的Item和cache下的item）
+    /// </summary>
     protected Dictionary<Transform, T> itemControllerDic
     {
         set;
         get;
     }
-    protected List<T> itemControllers
+    /// <summary>
+    /// ui下的ItemControllers
+    /// </summary>
+    protected HashSet<T> itemControllers
     {
-        get
-        {
-            return itemControllerDic.Values.ToList().FindAll(x => x.itemTransform.gameObject.activeInHierarchy);
-        }
+        set;
+        get;
     }
     /// <summary>
     /// 是否有ScrollView
@@ -188,7 +201,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 初始化
     /// </summary>
-    void Init()
+    protected void Init()
     {
         if (isNoneScrollView) return;
         NGUITools.DestroyChildren(scrollViewTrans);
@@ -204,10 +217,10 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             switch (movement)
             {
                 case UIScrollView.Movement.Horizontal:
-                    itemTrans.SetLocalPosY(panel.finalClipRegion.y);
+                    itemTrans.SetLocalPos(0, panel.finalClipRegion.y);
                     break;
                 case UIScrollView.Movement.Vertical:
-                    itemTrans.SetLocalPosX(panel.finalClipRegion.x);
+                    itemTrans.SetLocalPos(panel.finalClipRegion.x, 0);
                     break;
             }
         }
@@ -225,6 +238,11 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             springPanel.enabled = false;
         }
 
+        if (itemControllers == null)
+        {
+            itemControllers = new HashSet<T>();
+        }
+
         var tClipRegion = panel.finalClipRegion;
         panelBounds = new Bounds(new Vector3(tClipRegion.x, tClipRegion.y, 0), new Vector3(tClipRegion.z, tClipRegion.w, 0));
 
@@ -235,7 +253,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 注册事件
     /// </summary>
-    void RegisterEvent()
+    protected void RegisterEvent()
     {
         if (isNoneScrollView) return;
         RemoveEvent();
@@ -250,7 +268,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 移除事件
     /// </summary>
-    void RemoveEvent()
+    protected void RemoveEvent()
     {
         if (isNoneScrollView) return;
 
@@ -267,26 +285,26 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// 添加Item
     /// </summary>
     /// <param name="pDirection"></param>
-    void AddItem(Direction pDirection)
+    protected void AddItem(Direction pDirection)
     {
         if (pDirection == Direction.None) return;
         var tItemControllers = itemControllers;
         if (tItemControllers == null || tItemControllers.Count == 0) return;
-        tItemControllers.Sort((x, y) => x.itemIndex.CompareTo(y.itemIndex));
+        var tTempItemCtls = tItemControllers.OrderBy(x => x.dataIndex).ToList();
         T tTempItemCtrl = null;
         var tItemIndex = 0;
         switch (pDirection)
         {
             case Direction.Right:
             case Direction.Bottom:
-                tTempItemCtrl = tItemControllers[tItemControllers.Count - 1];
-                tItemIndex = tTempItemCtrl.itemIndex + 1;
+                tTempItemCtrl = tTempItemCtls[tTempItemCtls.Count - 1];
+                tItemIndex = tTempItemCtrl.dataIndex + 1;
                 if (tItemIndex >= itemCount) return;
                 break;
             case Direction.Left:
             case Direction.Top:
-                tTempItemCtrl = tItemControllers[0];
-                tItemIndex = tTempItemCtrl.itemIndex - 1;
+                tTempItemCtrl = tTempItemCtls[0];
+                tItemIndex = tTempItemCtrl.dataIndex - 1;
                 if (tItemIndex < 0) return;
                 break;
         }
@@ -331,10 +349,10 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         switch (movement)
         {
             case UIScrollView.Movement.Horizontal:
-                tItemCtrl.itemTransform.SetLocalPosX(tItemOffset);
+                tItemCtrl.itemTransform.SetLocalPos(tItemOffset, 0);
                 break;
             case UIScrollView.Movement.Vertical:
-                tItemCtrl.itemTransform.SetLocalPosY(tItemOffset);
+                tItemCtrl.itemTransform.SetLocalPos(0, tItemOffset);
                 break;
         }
 
@@ -345,7 +363,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// Panel裁剪时触发
     /// </summary>
     /// <param name="pPanel"></param>
-    private void OnClipMove(UIPanel pPanel)
+    protected void OnClipMove(UIPanel pPanel)
     {
         if (isNoneScrollView || itemCount == 0) return;
         var tPanelOffset = panel.CalculateConstrainOffset(itemsBounds.min, itemsBounds.max);
@@ -358,14 +376,14 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         if (tIsLeft || tIsTop)
         {
             AddItem(tIsLeft ? Direction.Left : tIsTop ? Direction.Top : Direction.None);
-            var tIsTopOrLeft = itemControllers.Exists(x => x.itemIndex == 0);
+            var tIsTopOrLeft = itemControllers.Where(x => x.dataIndex == 0).Count() > 0;
             if (scrollView.isDragging)
             {
                 immediateRestrictScrollView = tIsTopOrLeft;
                 if (!tIsTopOrLeft)
                 {
-                    //开启这个后，如果使劲上下拖拽，会出现Item全部消失的bug
-                    //MoveOverBoundsItemTOCache();
+                    //开启这个后，当Item超出边界盒时会立即回收Item，但是有个bug，如果使劲上下拖拽，会出现Item全部消失的bug
+                    //MoveOverBoundsItemToCache();
                 }
             }
             else if (tIsTopOrLeft)
@@ -377,14 +395,14 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         {
             AddItem(tIsRight ? Direction.Right : tIsBottom ? Direction.Bottom : Direction.None);
 
-            var tIsBottomOrRight = itemControllers.Exists(x => x.itemIndex == itemCount - 1);
+            var tIsBottomOrRight = itemControllers.Where(x => x.dataIndex == itemCount - 1).Count() > 0;
             if (scrollView.isDragging)
             {
                 immediateRestrictScrollView = tIsBottomOrRight;
                 if (!tIsBottomOrRight)
                 {
-                    //开启这个后，如果使劲上下拖拽，会出现Item全部消失的bug
-                    //MoveOverBoundsItemTOCache();
+                    //开启这个后，当Item超出边界盒时会立即回收Item，但是有个bug，如果使劲上下拖拽，会出现Item全部消失的bug
+                    //MoveOverBoundsItemToCache();
                 }
             }
             else if (tIsBottomOrRight)
@@ -397,16 +415,16 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// ScrollView停止移动时触发
     /// </summary>
-    private void OnStoppedMoving()
+    protected void OnStoppedMoving()
     {
         if (isNoneScrollView) return;
-        MoveOverBoundsItemTOCache();
+        MoveOverBoundsItemToCache();
     }
 
     /// <summary>
     /// ScrollView移动时触发（每帧都会触发）
     /// </summary>
-    private void OnMomentumMove()
+    protected void OnMomentumMove()
     {
         if (isNoneScrollView) return;
     }
@@ -414,7 +432,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 手指松开时触发
     /// </summary>
-    private void OnDragFinished()
+    protected void OnDragFinished()
     {
         if (isNoneScrollView) return;
 
@@ -425,18 +443,18 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
         if (springPanel.enabled)
         {
-            springPanel.onFinished = MoveOverBoundsItemTOCache;
+            springPanel.onFinished = MoveOverBoundsItemToCache;
         }
         else
         {
-            MoveOverBoundsItemTOCache();
+            MoveOverBoundsItemToCache();
         }
     }
 
     /// <summary>
     /// 手指按下时触发
     /// </summary>
-    private void OnDragStarted()
+    protected void OnDragStarted()
     {
         if (isNoneScrollView) return;
         DisableSpringPanel();
@@ -449,7 +467,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// ScrollView归位
     /// </summary>
     /// <param name="pInstant"></param>
-    void RestrictWithinBounds(bool pInstant)
+    protected void RestrictWithinBounds(bool pInstant)
     {
         scrollView.RestrictWithinBounds(pInstant);
     }
@@ -457,9 +475,19 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 禁掉SpringPanel的滑动
     /// </summary>
-    void DisableSpringPanel()
+    protected void DisableSpringPanel()
     {
         springPanel.enabled = false;
+    }
+
+    /// <summary>
+    /// 更新Item的边界盒（当Item的边界盒有变化时，必须调用此方法更新下）
+    /// </summary>
+    /// <param name="pItem"></param>
+    public void UpdateItemBounds(T pItem)
+    {
+        var tBounds = NGUIMath.CalculateRelativeWidgetBounds(pItem.itemTransform);
+        pItem.bounds = tBounds;
     }
     #endregion
 
@@ -488,7 +516,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
                 tItemCtrl.bounds = tItemBounds;
 
                 var tItemOffsetY = tPreviousMaxY - tItemBounds.max.y;
-                tItemCtrl.itemTransform.SetLocalPosY(tItemOffsetY);
+                tItemCtrl.itemTransform.SetLocalPos(0, tItemOffsetY);
                 tPreviousMaxY = tPreviousMaxY - tItemBounds.size.y - itemIntervalPixel;
             }
         }
@@ -504,10 +532,18 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
                 tItemCtrl.bounds = tItemBounds;
 
                 var tItemOffsetX = tPreviousMinX - tItemBounds.min.x;
-                tItemCtrl.itemTransform.SetLocalPosX(tItemOffsetX);
+                tItemCtrl.itemTransform.SetLocalPos(tItemOffsetX, 0);
                 tPreviousMinX = tPreviousMinX + tItemBounds.size.x + itemIntervalPixel;
             }
         }
+    }
+
+    /// <summary>
+    /// ScrollView归位
+    /// </summary>
+    public void ResetPosition()
+    {
+        MoveToItemByIndex(0);
     }
     #endregion
 
@@ -515,7 +551,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 移除超出区域的Item到缓存池
     /// </summary>
-    void MoveOverBoundsItemTOCache()
+    protected void MoveOverBoundsItemToCache()
     {
         for (int i = 0; i < childCount;)
         {
@@ -539,51 +575,64 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// </summary>
     /// <param name="pIndex"></param>
     /// <returns></returns>
-    T GetItemControllerByCache(int pIndex)
+    protected T GetItemControllerByCache(int pIndex)
     {
         if (itemControllerDic == null)
         {
             itemControllerDic = new Dictionary<Transform, T>();
         }
 
-        T tItem;
+        T tItem = null;
         if (cacheTrans.childCount == 0)
         {
-            tItem = onLoadItem();
+            tItem = onLoadItem(pIndex);
             itemControllerDic.Add(tItem.itemTransform, tItem);
         }
         else
         {
-            var tItemKey = cacheTrans.GetChild(0);
-            tItem = itemControllerDic[tItemKey];
+            tItem = itemControllerDic[cacheTrans.GetChild(0)];
         }
 
-        tItem.itemTransform.transform.SetParent(itemTrans);
-        tItem.itemTransform.transform.localPosition = Vector3.zero;
-        tItem.itemTransform.transform.localEulerAngles = Vector3.zero;
-        tItem.itemTransform.transform.localScale = Vector3.one;
-        tItem.itemIndex = pIndex;
+        MoveItemToUI(tItem);
+        tItem.dataIndex = pIndex;
         return tItem;
+    }
+
+    /// <summary>
+    /// 移动Item到UI界面
+    /// </summary>
+    /// <param name="pItem"></param>
+    protected void MoveItemToUI(T pItem)
+    {
+        if (pItem == null) return;
+        var tTransform = pItem.itemTransform;
+        tTransform.SetParent(itemTrans);
+        tTransform.transform.localPosition = Vector3.zero;
+        tTransform.transform.localEulerAngles = Vector3.zero;
+        tTransform.transform.localScale = Vector3.one;
+        itemControllers.Add(pItem);
     }
 
     /// <summary>
     /// 移动指定Item到缓存池
     /// </summary>
-    /// <param name="pCtrl"></param>
-    void MoveItemToCache(T pCtrl)
+    /// <param name="pItem"></param>
+    protected void MoveItemToCache(T pItem)
     {
-        if (pCtrl == null) return;
-        pCtrl.itemTransform.SetParent(cacheTrans);
+        if (pItem == null) return;
+        pItem.itemTransform.SetParent(cacheTrans);
+        itemControllers.Remove(pItem);
     }
 
     /// <summary>
     /// 移动所有Item到缓存池下
     /// </summary>
-    void MoveAllItemToCache()
+    protected void MoveAllItemToCache()
     {
         while (childCount > 0)
         {
-            itemTrans.GetChild(0).SetParent(cacheTrans);
+            var tItem = itemControllerDic[itemTrans.GetChild(0)];
+            MoveItemToCache(tItem);
         }
         panel.baseClipRegion = new Vector4(panelBounds.center.x, panelBounds.center.y, panelBounds.size.x, panelBounds.size.y);
     }
@@ -593,7 +642,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 清空所有Item
     /// </summary>
-    void DestroyAllItem()
+    protected void DestroyAllItem()
     {
         if (onDeleteItem == null || itemControllerDic == null) return;
         foreach (var tCtrl in itemControllerDic.Values)
@@ -623,8 +672,17 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 /// </summary>
 public interface IRecycleTable
 {
-    int itemIndex { set; get; }
+    /// <summary>
+    /// 数据下标（自定义的Controller里面不能修改该属性）
+    /// </summary>
+    int dataIndex { set; get; }
+    /// <summary>
+    /// 返回该Item的Transform
+    /// </summary>
     Transform itemTransform { get; }
+    /// <summary>
+    /// Item的边界盒（自定义的Controller里面不能修改该属性）
+    /// </summary>
     Bounds bounds { set; get; }
 }
 
@@ -641,29 +699,13 @@ static class UIRecycleTableExtension
     {
         pTr.AddLocalPos(new Vector2(pX, pY));
     }
-    static public void AddLocalPosX(this Transform pTr, float pX)
-    {
-        pTr.AddLocalPos(pX, 0);
-    }
-    static public void AddLocalPosY(this Transform pTr, float pY)
-    {
-        pTr.AddLocalPos(0, pY);
-    }
 
     static public void SetLocalPos(this Transform pTr, Vector2 pPos)
     {
-        pTr.localPosition = new Vector3(pPos.x, pPos.y, 0);
+        pTr.localPosition = new Vector3(pPos.x, pPos.y, pTr.localPosition.z);
     }
     static public void SetLocalPos(this Transform pTr, float pX, float pY)
     {
         pTr.SetLocalPos(new Vector2(pX, pY));
-    }
-    static public void SetLocalPosX(this Transform pTr, float pX)
-    {
-        pTr.SetLocalPos(pX, 0);
-    }
-    static public void SetLocalPosY(this Transform pTr, float pY)
-    {
-        pTr.SetLocalPos(0, pY);
     }
 }
