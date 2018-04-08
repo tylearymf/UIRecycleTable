@@ -12,7 +12,6 @@ public class ItemController : IRecycleTable
     }
 
     GameObject mGameObject;
-    int mIndex;
     UISprite mSprite;
     UILabel mLabel;
 
@@ -24,13 +23,13 @@ public class ItemController : IRecycleTable
         }
     }
 
-    public int dataIndex { set; get; }
-    public Bounds bounds { set; get; }
+    public RecycleTableInfo recycleTablInfo { set; get; }
 
-    public void SetData(string pName)
+    public void SetData(TestInfo pInfo)
     {
-        mSprite.height = Random.Range(50, 150);
-        mSprite.width = Random.Range(50, 150);
-        mLabel.text = pName;
+        info = pInfo;
+        mLabel.text = pInfo.name.ToString();
+        mSprite.SetDimensions((int)pInfo.spriteSize.x, (int)pInfo.spriteSize.y);
     }
+    public TestInfo info { set; get; }
 }
