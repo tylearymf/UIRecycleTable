@@ -15,7 +15,7 @@ public class TestVieController : MonoBehaviour
 
     void Start()
     {
-        mDatas = Enumerable.Range(0, 100).Select(x =>
+        mDatas = Enumerable.Range(0, 2).Select(x =>
         {
             var t = new TestInfo()
             {

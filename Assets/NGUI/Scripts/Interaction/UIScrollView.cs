@@ -1044,20 +1044,20 @@ public class UIScrollView : MonoBehaviour
 
 #if UNITY_EDITOR
 
-	/// <summary>
-	/// Draw a visible orange outline of the bounds.
-	/// </summary>
+    /// <summary>
+    /// Draw a visible orange outline of the bounds.
+    /// </summary>
 
-	void OnDrawGizmos ()
-	{
-		//if (mPanel != null)
-		//{
-		//	if (!Application.isPlaying) mCalculatedBounds = false;
-		//	Bounds b = bounds;
-		//	Gizmos.matrix = transform.localToWorldMatrix;
-		//	Gizmos.color = new Color(1f, 0.4f, 0f);
-		//	Gizmos.DrawWireCube(new Vector3(b.center.x, b.center.y, b.min.z), new Vector3(b.size.x, b.size.y, 0f));
-		//}
-	}
+    void OnDrawGizmos()
+    {
+        if (mPanel != null)
+        {
+            if (!Application.isPlaying) mCalculatedBounds = false;
+            Bounds b = bounds;
+            Gizmos.matrix = transform.localToWorldMatrix;
+            Gizmos.color = new Color(1f, 0.4f, 0f);
+            Gizmos.DrawWireCube(new Vector3(b.center.x, b.center.y, b.min.z), new Vector3(b.size.x, b.size.y, 0f));
+        }
+    }
 #endif
 }

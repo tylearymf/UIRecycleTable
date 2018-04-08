@@ -279,6 +279,15 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             itemControllers = new HashSet<T>();
         }
 
+        dragInfo = new RecycleTableDragInfo<T>()
+        {
+            instant = false,
+            restrictScrollView = true,
+            dragDirection = Direction.None,
+            movement = movement,
+            panelOffset = Vector2.zero,
+        };
+
         RegisterEvent();
         MoveToItemByIndex(0);
     }
@@ -413,9 +422,10 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             AddItem(tIsLeft ? Direction.Left : tIsTop ? Direction.Top : Direction.None);
 
             var tIsTopOrLeft = itemControllers.Where(x => x.recycleTablInfo.dataIndex == 0).Count() > 0;
-            dragInfo = new RecycleTableDragInfo<T>()
+
+            var tInfo = new RecycleTableDragInfo<T>()
             {
-                immediated = tIsTopOrLeft,
+                restrictScrollView = tIsTopOrLeft,
                 panelOffset = tPanelOffset,
                 dragDirection = Direction.Top | Direction.Left,
                 instant = false,
@@ -424,6 +434,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
             if (scrollView.isDragging)
             {
+                dragInfo = tInfo;
                 if (!tIsTopOrLeft)
                 {
                     //开启这个后，当Item超出边界盒时会立即回收Item，但是有个bug，如果使劲上下拖拽，会出现Item全部消失的bug
@@ -432,7 +443,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             }
             else if (tIsTopOrLeft)
             {
-                RestrictWithinBounds(dragInfo);
+                RestrictWithinBounds(tInfo);
             }
         }
         else if (tIsRight || tIsBottom)
@@ -440,9 +451,9 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             AddItem(tIsRight ? Direction.Right : tIsBottom ? Direction.Bottom : Direction.None);
 
             var tIsBottomOrRight = itemControllers.Where(x => x.recycleTablInfo.dataIndex == itemCount - 1).Count() > 0;
-            dragInfo = new RecycleTableDragInfo<T>()
+            var tInfo = new RecycleTableDragInfo<T>()
             {
-                immediated = tIsBottomOrRight,
+                restrictScrollView = tIsBottomOrRight,
                 panelOffset = tPanelOffset,
                 dragDirection = Direction.Bottom | Direction.Right,
                 instant = false,
@@ -451,6 +462,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
             if (scrollView.isDragging)
             {
+                dragInfo = tInfo;
                 if (!tIsBottomOrRight)
                 {
                     //开启这个后，当Item超出边界盒时会立即回收Item，但是有个bug，如果使劲上下拖拽，会出现Item全部消失的bug
@@ -459,7 +471,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             }
             else if (tIsBottomOrRight)
             {
-                RestrictWithinBounds(dragInfo);
+                RestrictWithinBounds(tInfo);
             }
         }
     }
@@ -488,7 +500,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     {
         if (isNoneScrollView) return;
 
-        if (dragInfo.immediated)
+        if (dragInfo.restrictScrollView)
         {
             RestrictWithinBounds(dragInfo);
         }
@@ -521,7 +533,41 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <param name="pInstant"></param>
     protected void RestrictWithinBounds(RecycleTableDragInfo<T> pDragInfo)
     {
-        scrollView.RestrictWithinBounds(pDragInfo.instant);
+        var tConstraint = Vector3.zero;
+        var b = itemsBounds;
+        b.center += itemTrans.localPosition + scrollViewTrans.localPosition;
+
+        switch (movement)
+        {
+            case UIScrollView.Movement.Horizontal:
+                var tMin = panelBounds.min.x - b.min.x;
+                tConstraint = new Vector3(tMin + panel.clipSoftness.x, 0, 0);
+                break;
+            case UIScrollView.Movement.Vertical:
+                var tMax = panelBounds.max.y - b.max.y;
+                tConstraint = new Vector3(0, tMax - panel.clipSoftness.y, 0);
+                break;
+        }
+
+        if (tConstraint.sqrMagnitude > 0.1F)
+        {
+            if (!pDragInfo.instant && scrollView.dragEffect == UIScrollView.DragEffect.MomentumAndSpring)
+            {
+                var tPos = scrollViewTrans.localPosition + tConstraint;
+                tPos.x = Mathf.Round(tPos.x);
+                tPos.y = Mathf.Round(tPos.y);
+                SpringPanel.Begin(scrollViewTrans.gameObject, tPos, 8F);
+            }
+            else
+            {
+                scrollView.MoveRelative(tConstraint);
+                var tMomentum = scrollView.currentMomentum;
+                if (Mathf.Abs(tConstraint.x) > 0.01F) tMomentum.x = 0;
+                if (Mathf.Abs(tConstraint.y) > 0.01F) tMomentum.y = 0;
+                if (Mathf.Abs(tConstraint.z) > 0.01F) tMomentum.z = 0;
+                scrollView.currentMomentum = tMomentum;
+            }
+        }
 
         if (pDragInfo.isTopOrLeft && onStartTarget != null)
         {
@@ -537,10 +583,9 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 禁掉SpringPanel的滑动
     /// </summary>
-    protected void DisableSpringPanel()
-    {
-        springPanel.enabled = false;
-    }
+    public void DisableSpringPanel() { springPanel.enabled = false; }
+
+    public void CalculatedBounds() { mCalculatedBounds = true; }
     #endregion
 
     #region 定位
@@ -799,7 +844,7 @@ public struct RecycleTableInfo
 
 public struct RecycleTableDragInfo<T> where T : class, IRecycleTable
 {
-    public bool immediated { set; get; }
+    public bool restrictScrollView { set; get; }
     public Vector2 panelOffset { set; get; }
     public UIRecycleTable<T>.Direction dragDirection { set; get; }
     public bool instant { set; get; }
