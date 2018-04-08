@@ -281,8 +281,8 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
         dragInfo = new RecycleTableDragInfo<T>()
         {
-            instant = false,
             restrictScrollView = true,
+            instant = false,
             dragDirection = Direction.None,
             movement = movement,
             panelOffset = Vector2.zero,
@@ -421,7 +421,16 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         {
             AddItem(tIsLeft ? Direction.Left : tIsTop ? Direction.Top : Direction.None);
 
-            var tIsTopOrLeft = itemControllers.Where(x => x.recycleTablInfo.dataIndex == 0).Count() > 0;
+            var tIsTopOrLeft = false;
+            var tFirstItemCtrls = itemControllers == null || itemControllers.Count == 0 ? null : itemControllers.Where(x => x.recycleTablInfo.dataIndex == 0);
+            var tFirstBounds = new Bounds();
+            if (tFirstItemCtrls != null && tFirstItemCtrls.Count() == 1)
+            {
+                var tItemCtrl = tFirstItemCtrls.First();
+                tFirstBounds = tItemCtrl.recycleTablInfo.bounds;
+                tFirstBounds.center += tItemCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
+                tIsTopOrLeft = tIsLeft ? tFirstBounds.min.x > panelBounds.min.x : tIsTop ? tFirstBounds.max.y < panelBounds.max.y : tIsTopOrLeft;
+            }
 
             var tInfo = new RecycleTableDragInfo<T>()
             {
@@ -450,7 +459,17 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         {
             AddItem(tIsRight ? Direction.Right : tIsBottom ? Direction.Bottom : Direction.None);
 
-            var tIsBottomOrRight = itemControllers.Where(x => x.recycleTablInfo.dataIndex == itemCount - 1).Count() > 0;
+            var tIsBottomOrRight = false;
+            var tLastItemCtrls = itemControllers == null || itemControllers.Count == 0 ? null : itemControllers.Where(x => x.recycleTablInfo.dataIndex == itemCount - 1);
+            var tLastBounds = new Bounds();
+            if (tLastItemCtrls != null && tLastItemCtrls.Count() == 1)
+            {
+                var tItemCtrl = tLastItemCtrls.First();
+                tLastBounds = tItemCtrl.recycleTablInfo.bounds;
+                tLastBounds.center += tItemCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
+                tIsBottomOrRight = tIsRight ? tLastBounds.max.x < panelBounds.max.x : tIsBottom ? tLastBounds.min.y > panelBounds.min.y : tIsBottomOrRight;
+            }
+
             var tInfo = new RecycleTableDragInfo<T>()
             {
                 restrictScrollView = tIsBottomOrRight,
@@ -500,10 +519,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     {
         if (isNoneScrollView) return;
 
-        if (dragInfo.restrictScrollView)
-        {
-            RestrictWithinBounds(dragInfo);
-        }
+        RestrictWithinBounds(dragInfo);
 
         if (springPanel.enabled)
         {
@@ -533,40 +549,51 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <param name="pInstant"></param>
     protected void RestrictWithinBounds(RecycleTableDragInfo<T> pDragInfo)
     {
-        var tConstraint = Vector3.zero;
-        var b = itemsBounds;
-        b.center += itemTrans.localPosition + scrollViewTrans.localPosition;
+        if (!pDragInfo.restrictScrollView) return;
 
-        switch (movement)
+        var tHasSpace = movement == UIScrollView.Movement.Vertical ? itemsBounds.size.y < panelBounds.size.y :
+                movement == UIScrollView.Movement.Horizontal ? itemsBounds.size.x < panelBounds.size.x : false;
+        if (childCount == itemCount && tHasSpace)
         {
-            case UIScrollView.Movement.Horizontal:
-                var tMin = panelBounds.min.x - b.min.x;
-                tConstraint = new Vector3(tMin + panel.clipSoftness.x, 0, 0);
-                break;
-            case UIScrollView.Movement.Vertical:
-                var tMax = panelBounds.max.y - b.max.y;
-                tConstraint = new Vector3(0, tMax - panel.clipSoftness.y, 0);
-                break;
+            var tConstraint = Vector3.zero;
+            var b = itemsBounds;
+            b.center += itemTrans.localPosition + scrollViewTrans.localPosition;
+
+            switch (movement)
+            {
+                case UIScrollView.Movement.Horizontal:
+                    var tMin = panelBounds.min.x - b.min.x;
+                    tConstraint = new Vector3(tMin + panel.clipSoftness.x, 0, 0);
+                    break;
+                case UIScrollView.Movement.Vertical:
+                    var tMax = panelBounds.max.y - b.max.y;
+                    tConstraint = new Vector3(0, tMax - panel.clipSoftness.y, 0);
+                    break;
+            }
+
+            if (tConstraint.sqrMagnitude > 0.1F)
+            {
+                if (!pDragInfo.instant && scrollView.dragEffect == UIScrollView.DragEffect.MomentumAndSpring)
+                {
+                    var tPos = scrollViewTrans.localPosition + tConstraint;
+                    tPos.x = Mathf.Round(tPos.x);
+                    tPos.y = Mathf.Round(tPos.y);
+                    SpringPanel.Begin(scrollViewTrans.gameObject, tPos, 8F);
+                }
+                else
+                {
+                    scrollView.MoveRelative(tConstraint);
+                    var tMomentum = scrollView.currentMomentum;
+                    if (Mathf.Abs(tConstraint.x) > 0.01F) tMomentum.x = 0;
+                    if (Mathf.Abs(tConstraint.y) > 0.01F) tMomentum.y = 0;
+                    if (Mathf.Abs(tConstraint.z) > 0.01F) tMomentum.z = 0;
+                    scrollView.currentMomentum = tMomentum;
+                }
+            }
         }
-
-        if (tConstraint.sqrMagnitude > 0.1F)
+        else
         {
-            if (!pDragInfo.instant && scrollView.dragEffect == UIScrollView.DragEffect.MomentumAndSpring)
-            {
-                var tPos = scrollViewTrans.localPosition + tConstraint;
-                tPos.x = Mathf.Round(tPos.x);
-                tPos.y = Mathf.Round(tPos.y);
-                SpringPanel.Begin(scrollViewTrans.gameObject, tPos, 8F);
-            }
-            else
-            {
-                scrollView.MoveRelative(tConstraint);
-                var tMomentum = scrollView.currentMomentum;
-                if (Mathf.Abs(tConstraint.x) > 0.01F) tMomentum.x = 0;
-                if (Mathf.Abs(tConstraint.y) > 0.01F) tMomentum.y = 0;
-                if (Mathf.Abs(tConstraint.z) > 0.01F) tMomentum.z = 0;
-                scrollView.currentMomentum = tMomentum;
-            }
+            scrollView.RestrictWithinBounds(pDragInfo.instant);
         }
 
         if (pDragInfo.isTopOrLeft && onStartTarget != null)

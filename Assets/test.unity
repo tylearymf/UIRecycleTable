@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.44657868, g: 0.49641263, b: 0.57481706, a: 1}
+  m_IndirectSpecularColor: {r: 0.44657844, g: 0.49641222, b: 0.57481694, a: 1}
 --- !u!157 &3
 LightmapSettings:
   m_ObjectHideFlags: 0
@@ -258,6 +258,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   mScrollView: {fileID: 45749710}
   mPrefab: {fileID: 1205409526208918, guid: 006c701dd54dd4849b8889da6eedd30c, type: 2}
+  index: 0
 --- !u!1 &624860361
 GameObject:
   m_ObjectHideFlags: 0
@@ -737,7 +738,7 @@ Transform:
   m_GameObject: {fileID: 1784404357}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.0033726813, y: 0.0033726813, z: 0.0033726813}
+  m_LocalScale: {x: 0.0026041667, y: 0.0026041667, z: 0.0026041667}
   m_Children:
   - {fileID: 1130073473}
   - {fileID: 74019035}
