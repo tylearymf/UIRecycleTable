@@ -15,7 +15,7 @@ public class TestVieController : MonoBehaviour
 
     void Start()
     {
-        mDatas = Enumerable.Range(0, 100).Select(x =>
+        mDatas = Enumerable.Range(0, 2).Select(x =>
         {
             var t = new TestInfo()
             {
@@ -27,6 +27,14 @@ public class TestVieController : MonoBehaviour
 
         mRecycleTable = new UIRecycleTable<ItemController>(mScrollView, OnLoadItem, OnUpdateItem, OnDeleteItem);
         mRecycleTable.itemIntervalPixel = 20;
+        mRecycleTable.onStartTarget = pOffset =>
+        {
+            Debug.LogError("OnStartTarget : " + pOffset);
+        };
+        mRecycleTable.onEndTarget = pOffset =>
+        {
+            Debug.LogError("OnEndTarget : " + pOffset);
+        };
         mRecycleTable.ResetPosition(mDatas.Count);
     }
 

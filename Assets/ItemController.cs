@@ -23,6 +23,7 @@ public class ItemController : IRecycleTable
         }
     }
 
+    public int prefabType { set; get; }
     public RecycleTableInfo recycleTablInfo { set; get; }
 
     public void SetData(TestInfo pInfo)

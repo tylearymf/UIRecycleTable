@@ -7,18 +7,21 @@ using System.Linq;
 /// UIRecycleTable
 /// --Prefab使用说明
 ///     1、ScrollView不需要有子物体，ScrollView不需要有子物体，ScrollView不需要有子物体（本脚本会在Init的时候清除所有ScrollView的子物体）
+///     
 /// --代码使用说明
-///     ItemController 必须继承IRecycleTable接口，具体的看IRecycleTable注释
-/// 
 ///     1、使用构造方法初始化UIRecycleTable，例如：mRecycleTable = new UIRecycleTable<ItemController>(mScrollView, OnLoadItem, OnUpdateItem, OnDeleteItem);
 ///     2、当Item数量有变化时，直接调用itemCount属性赋值，或者调用ResetPosition、ForceRefreshItem方法
 ///     3、当界面中的某个Item的宽高有变化的时候，调用ForceFefreshItem重新刷新下界面
 ///     4、在界面Dispose时，必须调用本脚本的Dispose释放资源
+/// 
+///     注意：ItemController 必须继承IRecycleTable接口，具体的看IRecycleTable注释
+/// 
 /// --公共的委托、属性、方法
 ///     1、onLoadItem 当缓存池里面没有Item时，调用绑定的委托加载Prefab
 ///     2、onUpdateItem 刷新Item
 ///     3、onDeleteItem 在Dispose时，清理所有Item
 ///     4、onEndTarget、onStartTarget，用法具体查看注释
+///     5、getPrefabType 当有多种Prefab类型的时候必须绑定该委托，然后在ItemController初始化时为IRecycleTable接口中的prefabType赋值
 ///     
 ///     5、itemCount 设置Item的数量
 ///     6、itemIntervalPixel 设置Item间距
@@ -65,6 +68,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
     #region 委托
     public delegate T OnLoadItem(int pDataIndex);
+    public delegate int GetPrefabType(int pDataIndex);
     public delegate void OnUpdateItem(T pItemCtrl, int pDataIndex);
     public delegate void OnDeleteItem(T pItemCtrl);
     public delegate void OnTriggerTarget(float pOffset);
@@ -73,6 +77,10 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// 加载Item
     /// </summary>
     public OnLoadItem onLoadItem;
+    /// <summary>
+    /// 获取Prefab类型
+    /// </summary>
+    public GetPrefabType getPrefabType;
     /// <summary>
     /// 刷新Item
     /// </summary>
@@ -342,25 +350,25 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         if (tItemControllers == null || tItemControllers.Count == 0) return;
         var tTempItemCtls = tItemControllers.OrderBy(x => x.recycleTablInfo.dataIndex).ToList();
         T tTempItemCtrl = null;
-        var tItemIndex = 0;
+        var tDataIndex = 0;
         switch (pDirection)
         {
             case Direction.Right:
             case Direction.Bottom:
                 tTempItemCtrl = tTempItemCtls[tTempItemCtls.Count - 1];
-                tItemIndex = tTempItemCtrl.recycleTablInfo.dataIndex + 1;
-                if (tItemIndex >= itemCount) return;
+                tDataIndex = tTempItemCtrl.recycleTablInfo.dataIndex + 1;
+                if (tDataIndex >= itemCount) return;
                 break;
             case Direction.Left:
             case Direction.Top:
                 tTempItemCtrl = tTempItemCtls[0];
-                tItemIndex = tTempItemCtrl.recycleTablInfo.dataIndex - 1;
-                if (tItemIndex < 0) return;
+                tDataIndex = tTempItemCtrl.recycleTablInfo.dataIndex - 1;
+                if (tDataIndex < 0) return;
                 break;
         }
         if (tTempItemCtrl == null) return;
-        var tItemCtrl = GetItemControllerByCache(tItemIndex);
-        onUpdateItem(tItemCtrl, tItemIndex);
+        var tItemCtrl = GetItemControllerByCache(tDataIndex);
+        onUpdateItem(tItemCtrl, tDataIndex);
 
         var tTempItemBounds = NGUIMath.CalculateRelativeWidgetBounds(tTempItemCtrl.itemTransform);
         tTempItemBounds.center += tTempItemCtrl.itemTransform.localPosition;
@@ -572,10 +580,14 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
                 case UIScrollView.Movement.Horizontal:
                     var tMin = panelBounds.min.x - b.min.x;
                     tConstraint = new Vector3(tMin + panel.clipSoftness.x, 0, 0);
+
+                    pDragInfo.dragDirection = tConstraint.x < 0 ? Direction.Left : tConstraint.x > 0 ? Direction.Right : Direction.None;
                     break;
                 case UIScrollView.Movement.Vertical:
                     var tMax = panelBounds.max.y - b.max.y;
                     tConstraint = new Vector3(0, tMax - panel.clipSoftness.y, 0);
+
+                    pDragInfo.dragDirection = tConstraint.y > 0 ? Direction.Top : tConstraint.y < 0 ? Direction.Bottom : Direction.None;
                     break;
             }
 
@@ -759,14 +771,30 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         }
 
         T tItemCtrl = null;
-        if (cacheTrans.childCount == 0)
+        if (cacheTrans.childCount > 0)
+        {
+            if (getPrefabType == null)
+            {
+                tItemCtrl = itemControllerDic[cacheTrans.GetChild(0)];
+            }
+            else
+            {
+                for (int i = 0; i < cacheTrans.childCount; i++)
+                {
+                    var tCtrl = itemControllerDic[cacheTrans.GetChild(i)];
+                    if (getPrefabType(pDataIndex) == tCtrl.prefabType)
+                    {
+                        tItemCtrl = tCtrl;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (tItemCtrl == null)
         {
             tItemCtrl = onLoadItem(pDataIndex);
             itemControllerDic.Add(tItemCtrl.itemTransform, tItemCtrl);
-        }
-        else
-        {
-            tItemCtrl = itemControllerDic[cacheTrans.GetChild(0)];
         }
 
         MoveItemToUI(tItemCtrl);
@@ -859,6 +887,10 @@ public interface IRecycleTable
     /// 自定义的Controller里面不能修改该类的属性
     /// </summary>
     RecycleTableInfo recycleTablInfo { set; get; }
+    /// <summary>
+    /// Prefab类型（用于存在类型不同的Prefab）
+    /// </summary>
+    int prefabType { set; get; }
     /// <summary>
     /// 返回该Item的Transform
     /// </summary>
