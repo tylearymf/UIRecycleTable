@@ -837,6 +837,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     {
         if (isNoneScrollView) return;
 
+        RemoveEvent();
         DestroyAllItem();
         onLoadItem = null;
         onUpdateItem = null;
