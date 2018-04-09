@@ -631,6 +631,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     public void MoveToItemByIndex(int pDataIndex)
     {
         if (isNoneScrollView) return;
+        DisableSpringPanel();
         MoveAllItemToCache();
         if (itemCount == 0) return;
         moveToItemByIndex(pDataIndex, panelBounds);
@@ -699,6 +700,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             MoveToItemByIndex(0);
             return;
         }
+        DisableSpringPanel();
         MoveOverBoundsItemToCache();
         T tFirst = null;
         IOrderedEnumerable<T> tTempCtrls = null;
