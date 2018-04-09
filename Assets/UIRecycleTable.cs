@@ -263,8 +263,16 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
         if (!cacheTrans)
         {
-            cacheTrans = NGUITools.AddChild(scrollViewTrans.parent.gameObject).transform;
-            cacheTrans.name = "UIRecycleTableCache";
+            var tCacheTrans = scrollViewTrans.parent.Find("UIRecycleTableCache");
+            if (tCacheTrans != null)
+            {
+                cacheTrans = tCacheTrans;
+            }
+            else
+            {
+                cacheTrans = NGUITools.AddChild(scrollViewTrans.parent.gameObject).transform;
+                cacheTrans.name = "UIRecycleTableCache";
+            }
             cacheTrans.gameObject.SetActive(false);
         }
 
