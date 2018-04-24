@@ -189,7 +189,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     }
     protected int childCount
     {
-        get { return isNoneChild ? 0 : itemTrans.childCount; }
+        get { return isNoneChild ? 0 : itemControllers.Count; }
     }
     protected Bounds itemsBounds
     {
@@ -463,14 +463,18 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             if (scrollView.isDragging)
             {
                 dragInfo = tInfo;
+                if (!tIsTopOrLeft)
+                {
+                    MoveOverBoundsItemToCache();
+                }
             }
             else if (tIsTopOrLeft)
             {
                 RestrictWithinBounds(tInfo);
             }
-            if (!tIsTopOrLeft)
+            else
             {
-                MoveOverBoundsItemToCache();
+                MoveOverBoundsItemToCache(false);
             }
         }
         else if (tIsRight || tIsBottom)
@@ -500,14 +504,18 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             if (scrollView.isDragging)
             {
                 dragInfo = tInfo;
+                if (!tIsBottomOrRight)
+                {
+                    MoveOverBoundsItemToCache();
+                }
             }
             else if (tIsBottomOrRight)
             {
                 RestrictWithinBounds(tInfo);
             }
-            if (!tIsBottomOrRight)
+            else
             {
-                MoveOverBoundsItemToCache();
+                MoveOverBoundsItemToCache(false);
             }
         }
     }
@@ -540,7 +548,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
 
         if (springPanel.enabled)
         {
-            springPanel.onFinished = MoveOverBoundsItemToCache;
+            springPanel.onFinished = () => { MoveOverBoundsItemToCache(); };
         }
         else
         {
@@ -782,11 +790,11 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 移除超出区域的Item到缓存池
     /// </summary>
-    protected void MoveOverBoundsItemToCache()
+    protected void MoveOverBoundsItemToCache(bool pCalculateBounds = true)
     {
         for (int i = 0; i < childCount;)
         {
-            if (childCount == 1) break;
+            if (itemTrans.childCount == 1 || i >= itemTrans.childCount) break;
             var tKey = itemTrans.GetChild(i);
             T tCtrl = default(T);
             if (!itemControllerDic.TryGetValue(tKey, out tCtrl)) continue;
@@ -799,7 +807,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             }
             MoveItemToCache(tCtrl);
         }
-        mCalculatedBounds = true;
+        if (pCalculateBounds) CalculatedBounds();
     }
 
     /// <summary>
