@@ -189,7 +189,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     }
     protected int childCount
     {
-        get { return isNoneChild ? 0 : itemControllers.Count; }
+        get { return isNoneChild ? 0 : itemTrans.childCount; }
     }
     protected Bounds itemsBounds
     {
@@ -463,15 +463,14 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             if (scrollView.isDragging)
             {
                 dragInfo = tInfo;
-                if (!tIsTopOrLeft)
-                {
-                    //开启这个后，当Item超出边界盒时会立即回收Item，但是有个bug，如果使劲上下拖拽，会出现Item全部消失的bug
-                    //MoveOverBoundsItemToCache();
-                }
             }
             else if (tIsTopOrLeft)
             {
                 RestrictWithinBounds(tInfo);
+            }
+            if (!tIsTopOrLeft)
+            {
+                MoveOverBoundsItemToCache();
             }
         }
         else if (tIsRight || tIsBottom)
@@ -501,15 +500,14 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             if (scrollView.isDragging)
             {
                 dragInfo = tInfo;
-                if (!tIsBottomOrRight)
-                {
-                    //开启这个后，当Item超出边界盒时会立即回收Item，但是有个bug，如果使劲上下拖拽，会出现Item全部消失的bug
-                    //MoveOverBoundsItemToCache();
-                }
             }
             else if (tIsBottomOrRight)
             {
                 RestrictWithinBounds(tInfo);
+            }
+            if (!tIsBottomOrRight)
+            {
+                MoveOverBoundsItemToCache();
             }
         }
     }
@@ -568,6 +566,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         if (ScrollViewHasSpace())
         {
             if (mWheelCorutine != null) scrollView.StopCoroutine(mWheelCorutine);
+            if (!scrollView.gameObject.activeInHierarchy) return;
             mWheelCorutine = scrollView.StartCoroutine(waitForFrame());
         }
     }
@@ -787,6 +786,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     {
         for (int i = 0; i < childCount;)
         {
+            if (childCount == 1) break;
             var tKey = itemTrans.GetChild(i);
             T tCtrl = default(T);
             if (!itemControllerDic.TryGetValue(tKey, out tCtrl)) continue;
