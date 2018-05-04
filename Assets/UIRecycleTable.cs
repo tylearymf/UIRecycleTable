@@ -51,7 +51,11 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// UIRecycleTable唯一入口
     /// </summary>
     /// <param name="pScrollView"></param>
-    public UIRecycleTable(UIScrollView pScrollView, OnLoadItem pOnLoadItem, OnUpdateItem pOnUpdateItem, OnDeleteItem pOnDeleteItem)
+    /// <param name="pOnLoadItem">加载item</param>
+    /// <param name="pOnUpdateItem">更新item</param>
+    /// <param name="pOnDeleteItem">删除item</param>
+    /// <param name="pGetPrefabType">当有多种Prefab类型的时候必须绑定该委托，然后在ItemController初始化时为IRecycleTable接口中的prefabType赋值</param>
+    public UIRecycleTable(UIScrollView pScrollView, OnLoadItem pOnLoadItem, OnUpdateItem pOnUpdateItem, OnDeleteItem pOnDeleteItem, GetPrefabType pGetPrefabType)
     {
         if (pScrollView == null) return;
 
@@ -61,6 +65,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         onLoadItem = pOnLoadItem;
         onUpdateItem = pOnUpdateItem;
         onDeleteItem = pOnDeleteItem;
+        getPrefabType = pGetPrefabType;
 
         Init();
     }
@@ -76,27 +81,51 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     /// <summary>
     /// 加载Item
     /// </summary>
-    public OnLoadItem onLoadItem;
+    public OnLoadItem onLoadItem
+    {
+        protected set;
+        get;
+    }
     /// <summary>
     /// 获取Prefab类型
     /// </summary>
-    public GetPrefabType getPrefabType;
+    public GetPrefabType getPrefabType
+    {
+        protected set;
+        get;
+    }
     /// <summary>
     /// 刷新Item
     /// </summary>
-    public OnUpdateItem onUpdateItem;
+    public OnUpdateItem onUpdateItem
+    {
+        protected set;
+        get;
+    }
     /// <summary>
     /// 删除Item
     /// </summary>
-    public OnDeleteItem onDeleteItem;
+    public OnDeleteItem onDeleteItem
+    {
+        protected set;
+        get;
+    }
     /// <summary>
     /// 当向上或向左滑动，ScrollView触底回弹时触发该委托 参数值为Panel偏移量（此委托会频繁触发，如果不需要在短时间内触发多次，可以以绑定个倒计时，多少秒后再触发）
     /// </summary>
-    public OnTriggerTarget onEndTarget;
+    public OnTriggerTarget onEndTarget
+    {
+        set;
+        get;
+    }
     /// <summary>
     /// 当向下或向右滑动，ScrollView触顶回弹时触发该委托 参数值为Panel偏移量（此委托会频繁触发，如果不需要在短时间内触发多次，可以以绑定个倒计时，多少秒后再触发）
     /// </summary>
-    public OnTriggerTarget onStartTarget;
+    public OnTriggerTarget onStartTarget
+    {
+        set;
+        get;
+    }
     #endregion
 
     #region 字段
@@ -926,6 +955,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         onDeleteItem = null;
         onEndTarget = null;
         onStartTarget = null;
+        getPrefabType = null;
     }
     #endregion
 }

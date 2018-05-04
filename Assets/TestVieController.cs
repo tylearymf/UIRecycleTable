@@ -25,7 +25,7 @@ public class TestVieController : MonoBehaviour
             return t;
         }).ToList();
 
-        mRecycleTable = new UIRecycleTable<ItemController>(mScrollView, OnLoadItem, OnUpdateItem, OnDeleteItem);
+        mRecycleTable = new UIRecycleTable<ItemController>(mScrollView, OnLoadItem, OnUpdateItem, OnDeleteItem, null);
         mRecycleTable.itemIntervalPixel = 20;
         mRecycleTable.ResetPosition(mDatas.Count);
     }
