@@ -27,7 +27,19 @@ public class TestVieController : MonoBehaviour
 
         mRecycleTable = new UIRecycleTable<ItemController>(mScrollView, OnLoadItem, OnUpdateItem, OnDeleteItem, null);
         mRecycleTable.itemIntervalPixel = 20;
+        mRecycleTable.onStartTarget = OnStartTarget;
+        mRecycleTable.onEndTarget = OnEndTarget;
         mRecycleTable.ResetPosition(mDatas.Count);
+    }
+
+    private void OnEndTarget(float pOffset)
+    {
+        Debug.LogError("EndTarget:" + pOffset);
+    }
+
+    private void OnStartTarget(float pOffset)
+    {
+        Debug.LogError("StartTarget:" + pOffset);
     }
 
     private void OnDeleteItem(ItemController pItem)

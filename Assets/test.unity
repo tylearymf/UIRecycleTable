@@ -222,7 +222,7 @@ GameObject:
   m_Component:
   - component: {fileID: 74019035}
   - component: {fileID: 74019036}
-  m_Layer: 0
+  m_Layer: 14
   m_Name: TestView
   m_TagString: Untagged
   m_Icon: {fileID: 0}

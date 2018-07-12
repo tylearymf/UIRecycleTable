@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using System;
-using System.Linq;
 
 /// <summary>
 /// UIRecycleTable
@@ -243,7 +242,7 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         get;
     }
     /// <summary>
-    /// 是否立即归位ScrollView
+    /// 拖拽信息
     /// </summary>
     protected RecycleTableDragInfo<T> dragInfo
     {
@@ -259,6 +258,27 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         {
             if (isNoneScrollView) return UIScrollView.Movement.Custom;
             return scrollView.movement;
+        }
+    }
+    /// <summary>
+    /// 获取滑动方向
+    /// </summary>
+    protected Direction dragDirection
+    {
+        get
+        {
+            if (isNoneScrollView) return Direction.None;
+            switch (movement)
+            {
+                case UIScrollView.Movement.Horizontal:
+                    if (scrollView.currentMomentum.x == 0) return Direction.None;
+                    return scrollView.currentMomentum.x > 0 ? Direction.Right : Direction.Left;
+                case UIScrollView.Movement.Vertical:
+                    if (scrollView.currentMomentum.y == 0) return Direction.None;
+                    return scrollView.currentMomentum.y > 0 ? Direction.Top : Direction.Bottom;
+                default:
+                    return Direction.None;
+            }
         }
     }
     #endregion
@@ -378,22 +398,20 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     protected void AddItem(Direction pDirection)
     {
         if (pDirection == Direction.None) return;
-        var tItemControllers = itemControllers;
-        if (tItemControllers == null || tItemControllers.Count == 0) return;
-        var tTempItemCtls = tItemControllers.OrderBy(x => x.recycleTablInfo.dataIndex).ToList();
+        if (itemControllers == null || itemControllers.Count == 0) return;
         T tTempItemCtrl = null;
         var tDataIndex = 0;
         switch (pDirection)
         {
             case Direction.Right:
             case Direction.Bottom:
-                tTempItemCtrl = tTempItemCtls[tTempItemCtls.Count - 1];
+                tTempItemCtrl = UIRecycleTableExtension.FindCustom<T, float>(itemControllers, x => x.recycleTablInfo.dataIndex, false);
                 tDataIndex = tTempItemCtrl.recycleTablInfo.dataIndex + 1;
                 if (tDataIndex >= itemCount) return;
                 break;
             case Direction.Left:
             case Direction.Top:
-                tTempItemCtrl = tTempItemCtls[0];
+                tTempItemCtrl = UIRecycleTableExtension.FindCustom<T, float>(itemControllers, x => x.recycleTablInfo.dataIndex, true);
                 tDataIndex = tTempItemCtrl.recycleTablInfo.dataIndex - 1;
                 if (tDataIndex < 0) return;
                 break;
@@ -458,25 +476,25 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
     protected void OnClipMove(UIPanel pPanel)
     {
         if (isNoneScrollView || itemCount == 0) return;
-        var tPanelOffset = panel.CalculateConstrainOffset(itemsBounds.min, itemsBounds.max);
 
-        var tIsLeft = tPanelOffset.x < -1 && movement == UIScrollView.Movement.Horizontal;
-        var tIsBottom = tPanelOffset.y < -1 && movement == UIScrollView.Movement.Vertical;
-        var tIsRight = tPanelOffset.x > 1 && movement == UIScrollView.Movement.Horizontal;
-        var tIsTop = tPanelOffset.y > 1 && movement == UIScrollView.Movement.Vertical;
+        var tPanelOffset = Vector3.zero;
+        var tAddItemDirection = CalculateAddItemDirection(out tPanelOffset);
+        var tIsLeft = tAddItemDirection == Direction.Left;
+        var tIsBottom = tAddItemDirection == Direction.Bottom;
+        var tIsRight = tAddItemDirection == Direction.Right;
+        var tIsTop = tAddItemDirection == Direction.Top;
 
         if (tIsLeft || tIsTop)
         {
             AddItem(tIsLeft ? Direction.Left : tIsTop ? Direction.Top : Direction.None);
 
             var tIsTopOrLeft = false;
-            var tFirstItemCtrls = itemControllers == null || itemControllers.Count == 0 ? null : itemControllers.Where(x => x.recycleTablInfo.dataIndex == 0);
+            var tFirstItemCtrl = UIRecycleTableExtension.Find(itemControllers, x => x.recycleTablInfo.dataIndex == 0);
             var tFirstBounds = new Bounds();
-            if (tFirstItemCtrls != null && tFirstItemCtrls.Count() == 1)
+            if (tFirstItemCtrl != null)
             {
-                var tItemCtrl = tFirstItemCtrls.First();
-                tFirstBounds = tItemCtrl.recycleTablInfo.bounds;
-                tFirstBounds.center += tItemCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
+                tFirstBounds = tFirstItemCtrl.recycleTablInfo.bounds;
+                tFirstBounds.center += tFirstItemCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
                 tIsTopOrLeft = tIsLeft ? tFirstBounds.min.x > panelBounds.min.x : tIsTop ? tFirstBounds.max.y < panelBounds.max.y : tIsTopOrLeft;
             }
 
@@ -511,13 +529,12 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
             AddItem(tIsRight ? Direction.Right : tIsBottom ? Direction.Bottom : Direction.None);
 
             var tIsBottomOrRight = false;
-            var tLastItemCtrls = itemControllers == null || itemControllers.Count == 0 ? null : itemControllers.Where(x => x.recycleTablInfo.dataIndex == itemCount - 1);
+            var tLastItemCtrl = UIRecycleTableExtension.Find(itemControllers, x => x.recycleTablInfo.dataIndex == itemCount - 1);
             var tLastBounds = new Bounds();
-            if (tLastItemCtrls != null && tLastItemCtrls.Count() == 1)
+            if (tLastItemCtrl != null)
             {
-                var tItemCtrl = tLastItemCtrls.First();
-                tLastBounds = tItemCtrl.recycleTablInfo.bounds;
-                tLastBounds.center += tItemCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
+                tLastBounds = tLastItemCtrl.recycleTablInfo.bounds;
+                tLastBounds.center += tLastItemCtrl.itemTransform.localPosition + scrollViewTrans.localPosition;
                 tIsBottomOrRight = tIsRight ? tLastBounds.max.x < panelBounds.max.x : tIsBottom ? tLastBounds.min.y > panelBounds.min.y : tIsBottomOrRight;
             }
 
@@ -547,6 +564,39 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
                 MoveOverBoundsItemToCache(false);
             }
         }
+    }
+
+    /// <summary>
+    /// 在返回的方向上添加Item
+    /// </summary>
+    /// <returns></returns>
+    Direction CalculateAddItemDirection(out Vector3 pOffset)
+    {
+        pOffset = Vector3.zero;
+        if (dragDirection == Direction.None) return Direction.None;
+        var tItemBounds = itemsBounds;
+        tItemBounds.center += itemTrans.localPosition + scrollViewTrans.localPosition;
+
+        switch (dragDirection)
+        {
+            case Direction.Left:
+                pOffset = new Vector3(tItemBounds.max.x - panelBounds.max.x, 0, 0);
+                if (tItemBounds.max.x <= panelBounds.max.x) return Direction.Right;
+                break;
+            case Direction.Bottom:
+                pOffset = new Vector3(0, tItemBounds.max.y - panelBounds.max.y, 0);
+                if (tItemBounds.max.y <= panelBounds.max.y) return Direction.Top;
+                break;
+            case Direction.Right:
+                pOffset = new Vector3(tItemBounds.min.x - panelBounds.min.x, 0, 0);
+                if (tItemBounds.min.x >= panelBounds.min.x) return Direction.Left;
+                break;
+            case Direction.Top:
+                pOffset = new Vector3(0, tItemBounds.min.y - panelBounds.min.y, 0);
+                if (tItemBounds.min.y >= panelBounds.min.y) return Direction.Bottom;
+                break;
+        }
+        return Direction.None;
     }
 
     /// <summary>
@@ -795,16 +845,13 @@ public class UIRecycleTable<T> : IDisposable where T : class, IRecycleTable
         DisableSpringPanel();
         MoveOverBoundsItemToCache();
         T tFirst = null;
-        IOrderedEnumerable<T> tTempCtrls = null;
         switch (movement)
         {
             case UIScrollView.Movement.Horizontal:
-                tTempCtrls = itemControllers.OrderBy(x => x.itemTransform.localPosition.x);
-                tFirst = tTempCtrls.FirstOrDefault();
+                tFirst = UIRecycleTableExtension.FindCustom<T, float>(itemControllers, x => x.itemTransform.localPosition.x, true);
                 break;
             case UIScrollView.Movement.Vertical:
-                tTempCtrls = itemControllers.OrderByDescending(x => x.itemTransform.localPosition.y);
-                tFirst = tTempCtrls.FirstOrDefault();
+                tFirst = UIRecycleTableExtension.FindCustom<T, float>(itemControllers, x => x.itemTransform.localPosition.y, false);
                 break;
         }
         if (tFirst == null) return;
@@ -1046,5 +1093,54 @@ static class UIRecycleTableExtension
     static public Vector3 ToVector3(this Vector2 pVec2)
     {
         return new Vector3(pVec2.x, pVec2.y, 0);
+    }
+
+    static public T Find<T>(HashSet<T> pSets, Predicate<T> pPredicate)
+    {
+        if (pSets == null || pSets.Count == 0 || pPredicate == null) return default(T);
+        var tEnumerator = pSets.GetEnumerator();
+        while (tEnumerator.MoveNext())
+        {
+            var tCurrent = tEnumerator.Current;
+            if (pPredicate(tCurrent))
+            {
+                return tCurrent;
+            }
+        }
+        return default(T);
+    }
+
+    static public T FindCustom<T, V>(HashSet<T> pSets, Func<T, V> pFunc, bool pFindMin) where V : IComparable<V>
+    {
+        if (pSets == null || pSets.Count == 0 || pFunc == null) return default(T);
+        var tEnumerator = pSets.GetEnumerator();
+        var tMinV = default(V);
+        var tMinT = default(T);
+
+        while (tEnumerator.MoveNext())
+        {
+            var tCurrentT = tEnumerator.Current;
+            var tCurrentV = pFunc(tCurrentT);
+
+            if (EqualityComparer<T>.Default.Equals(tMinT, default(T)))
+            {
+                tMinV = tCurrentV;
+                tMinT = tCurrentT;
+                continue;
+            }
+
+            var tVal = tCurrentV.CompareTo(tMinV);
+            if (pFindMin)
+            {
+                if (tVal != -1) continue;
+            }
+            else
+            {
+                if (tVal != 1) continue;
+            }
+            tMinV = tCurrentV;
+            tMinT = tCurrentT;
+        }
+        return tMinT;
     }
 }
